@@ -2,6 +2,8 @@ global CANDIDATES: Field = 2;
 
 use dep::std;
 use dep::ecrecover;
+use dep::std::println;
+use dep::std::hash::blake2s;
 
 fn main(
   pub_key: [u8; 64],
@@ -11,11 +13,48 @@ fn main(
   polynomial_commitment: pub Field,
   nullifier: pub [u8; 32],
 ) {
-  // Write your main logic here
+  // Build public key
+  let unified_pub_key = ecrecover::secp256k1::PubKey::from_unified(pub_key);
+
+  // Verify Signature
+  let is_valid = unified_pub_key.verify_sig(signature, hashed_message);
+  assert(is_valid);
+
+  // Build ethereum address from ECDSA public key
+  let address = unified_pub_key.to_eth_address();
+
+  // Hash recovered address
+  let address_hash = blake2s(address.to_be_bytes(8));
+  let commitment_bytes = polynomial_commitment.to_be_bytes(8);
+  // Verify address
+  for i in 0..32 {
+    assert(address_hash[i] == commitment_bytes[i]);
+  }
+
+  // Hash signature
+  let signature_hash = blake2s(signature);
+  // Verify nullifier
+  assert(signature_hash == nullifier);
+
+  // The hash of the recovered address should be a root of the polynomial
+  // So if we evaluate the polinomial at that point, the value should be 0
+  let pol_eval = evaluate_polynomial(polynomial, polynomial_commitment);
+  assert(pol_eval == 0);
 }
 
 fn evaluate_polynomial(polynomial: [Field; CANDIDATES + 1], x: Field) -> Field {
   // Write logic to evaluate polynomial here
+  let roots = polynomial.len();
+  let mut eval: Field = 1;
+
+  for i in 0..roots {
+    // Only evaluate polynomial if a root hasn't been found yet
+    if eval != 0 {
+     eval = polynomial[i] - x;
+    }
+  }
+
+  eval
 }
 
 #[test]
